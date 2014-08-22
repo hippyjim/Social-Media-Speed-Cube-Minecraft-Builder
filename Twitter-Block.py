@@ -1,5 +1,6 @@
 ###TeCoEd ###
 ###wORKING vERSION 3###
+### Save into Pi/home folder###
  
 import sys, subprocess, urllib, time, tweepy
 sys.path.append("./mcpi/api/python/mcpi")
