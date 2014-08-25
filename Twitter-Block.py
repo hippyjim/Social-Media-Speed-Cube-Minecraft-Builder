@@ -2,12 +2,13 @@
 ###wORKING vERSION 3###
 ### Save into Pi/home folder###
  
-import sys, subprocess, urllib, time, tweepy
-sys.path.append("./mcpi/api/python/mcpi")
-import minecraft
+import sys, subprocess, urllib, time, tweepy, random, ConfigParser
+# sys.path.append("./mcpi/api/python/mcpi")
+import mcpi.minecraft as minecraft
 mc = minecraft.Minecraft.create()
-import random
 
+config = ConfigParser.RawConfigParser()
+config.readfp(open(r'config.txt'))
 # == OAuth Authentication ==
 #
 # This mode of authentication is the new preferred way
@@ -15,14 +16,14 @@ import random
 
 # The consumer keys can be found on your application's Details
 # page located at https://dev.twitter.com/apps (under "OAuth settings")
-consumer_key= 'xxxxxxxxxxxxxxxxxxxx'
-consumer_secret= 'xxxxxxxxxxxxxxxxxxxxxxxxxxx'
+consumer_key= config.get('Twitter','consumer_key')
+consumer_secret= config.get('Twitter','consumer_secret')
 
 # The access tokens can be found on your applications's Details
 # page located at https://dev.twitter.com/apps (located 
 # under "Your access token")
-access_token= 'xxxxxxxxxxxxxxxxxxxxxxxxx'
-access_token_secret= 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+access_token=  config.get('Twitter','access_token')
+access_token_secret=  config.get('Twitter','access_token_secret')
 
 auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
 auth.set_access_token(access_token, access_token_secret)
@@ -51,7 +52,8 @@ def build_blocks():
 class BlockBuilder(tweepy.StreamListener):
     def on_status(self, tweet):
         global Blocks_Left
-        if tweet.text == "@Dan_Aldred block":
+        #if tweet.text == "@JimPiri block":
+        if "block" in tweet.text:
             build_blocks()
             print tweet.text
             print ""
@@ -70,9 +72,11 @@ class BlockBuilder(tweepy.StreamListener):
             print tweet.user.screen_name
             print""
             time.sleep(5)
-    
+
+print "Initialising"
 stream = tweepy.Stream(auth, BlockBuilder())
- 
+print "About to listen"
+
 try:
     stream.userstream()
 except KeyboardInterrupt:
