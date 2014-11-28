@@ -1,12 +1,57 @@
-###TeCoEd ###
-###wORKING vERSION 3###
+### Twitter controlled TNT Cube builder ###
+### Based on code by TeCoEd ###
+### Working Version 4 ###
 ### Save into Pi/home folder###
  
-import sys, subprocess, urllib, time, tweepy, random, ConfigParser
-# sys.path.append("./mcpi/api/python/mcpi")
+import sys
+import subprocess
+import urllib
+import time
+import tweepy
+import random
+import ConfigParser
+sys.path.append("../mcpi/api/python/mcpi")
 import mcpi.minecraft as minecraft
+import mcpi.block as block
+
+
+def print_and_say(message):
+    print message
+    mc.postToChat(message)
+
+
+def print_and_say_and_tweet(message, tweet=None):
+    global send_tweet_messages
+    message = time.strftime('%Y-%m-%d %H:%M:%S(UK) - ') + message
+    print_and_say(message)
+    if send_tweet_messages:
+        if tweet is not None:
+            api.update_status(message, tweet.id)
+        else:
+            api.update_status(message)
+
+
+def say_blocks_left():
+    global filledBlocks
+    print_and_say_and_tweet("Blocks left: {}".format(len(filledBlocks)))
+
+
+def place_block(tweet):
+    global filledBlocks
+    if filledBlocks:
+        block_coord = filledBlocks.pop()
+        mc.setBlock(block_coord["x"], block_coord["y"], block_coord["z"], block.TNT)
+        print_and_say_and_tweet("Block placed at {}/{}/{} by @{}".format(block_coord["x"], block_coord["y"], block_coord["z"], tweet.user.screen_name), tweet)
+        say_blocks_left()
+    else:
+        print_and_say_and_tweet("Sorry @{} - no more blocks left to place".format(tweet.user.screen_name), tweet)
+
+
+print "Connecting to minecraft"
 mc = minecraft.Minecraft.create()
 
+mc.postToChat('Initialising')
+print "Connected. Reading config"
 config = ConfigParser.RawConfigParser()
 config.readfp(open(r'config.txt'))
 # == OAuth Authentication ==
@@ -22,63 +67,68 @@ consumer_secret= config.get('Twitter','consumer_secret')
 # The access tokens can be found on your applications's Details
 # page located at https://dev.twitter.com/apps (located 
 # under "Your access token")
-access_token=  config.get('Twitter','access_token')
-access_token_secret=  config.get('Twitter','access_token_secret')
+access_token = config.get('Twitter','access_token')
+access_token_secret = config.get('Twitter','access_token_secret')
+
+twitter_username = config.get('Twitter','twitter_user_name')
+
+send_tweet_messages_config = config.get('Twitter','send_tweet_messages')
+
+send_tweet_messages = (send_tweet_messages_config == '1' or send_tweet_messages_config.lower() == 'true')
+
+trigger_keyword=config.get('Options','keyword')
+cubeSize = int(config.get('Options','block_size'))
+
+print "Config complete. Connecting to Twitter"
 
 auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
 auth.set_access_token(access_token, access_token_secret)
 
 api = tweepy.API(auth)
 
-###twitter block builder###
-Blocks_Left = 1000
+print "Twitter authenticated"
 
-def build_blocks():
-    block = 46,1
-    x = random.randint(0, 5) ### 5 x 5 x 5 
-    y = random.randint(0, 5)
-    z = random.randint(0, 5)
+totalBlocks = cubeSize * cubeSize * cubeSize
 
-    ###TEST THE TWITTER INTERACTION place a single block###
-    #pos = mc.player.getPos()###testing tweets work
-    #x = pos.x
-    #y = pos.y
-    #z = pos.z
-    
-    mc.setBlock(x, y, z, block)
-    print "Block Placed"
+filledBlocks = []
+blocksChecked = 0
 
-  
+mc.postToChat('Checking existing blocks')
+print "Checking existing blocks"
+for x in range(0, cubeSize):
+    for y in range(0, cubeSize):
+        for z in range(0, cubeSize):
+            blockType = mc.getBlock(x,y,z)
+            blocksChecked += 1
+            if blockType != block.TNT.id:
+                filledBlocks.append({"x":x,"y":y,"z":z})
+                sys.stdout.write("Blocks checked: %d   \r" % (blocksChecked) )
+                sys.stdout.flush()
+            else:
+                print "block at {}/{}/{} is TNT. Skipping".format(x,y,z)
+
+mc.postToChat("{} existing TNT blocks found".format(totalBlocks-len(filledBlocks)))
+print "{} existing TNT blocks found".format(totalBlocks-len(filledBlocks))
+print "All blocks checked. Shuffling remaining spaces"
+random.shuffle(filledBlocks)
+say_blocks_left()
+
+
 class BlockBuilder(tweepy.StreamListener):
     def on_status(self, tweet):
-        global Blocks_Left
-        #if tweet.text == "@JimPiri block":
-        if "block" in tweet.text:
-            build_blocks()
-            print tweet.text
+        if tweet.user.screen_name != twitter_username and trigger_keyword in tweet.text.lower():
             print ""
-            print tweet.user.screen_name + " placed a block!"
-            mc.postToChat(tweet.user.screen_name)
-            mc.postToChat("placed a block")
-            Blocks_Left = Blocks_Left - 1 
-            print ""
-            print "Blocks left to build =", Blocks_Left
-            mc.postToChat("Blocks left to place")
-            mc.postToChat(Blocks_Left)
-            time.sleep(5)
-                   
-        else:
-            print tweet.text
-            print tweet.user.screen_name
-            print""
+            print_and_say("@{}: {}".format(tweet.user.screen_name, tweet.text))
+            place_block(tweet)
             time.sleep(5)
 
-print "Initialising"
+
+print "Initialising Twitter stream"
 stream = tweepy.Stream(auth, BlockBuilder())
-print "About to listen"
+print_and_say_and_tweet("Listening for tweets. Tweet a message containing '{}' to @{}".format(trigger_keyword, twitter_username))
 
 try:
     stream.userstream()
 except KeyboardInterrupt:
-    print "Exiting!"
+    print "Exiting"
     stream.disconnect()
